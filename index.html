@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Digitales Klassenbuch</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e3a8a">
+<meta name="description" content="Digitales Klassenbuch: Noten und Beobachtungen per Mikrofon erfassen, Excel-Export, Suche, Durchschnitte und Frühwarnsystem – synchron auf iPhone, iPad und Mac.">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon-32.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Klassenbuch">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ SETUP: Firebase-Verbindung einrichten ============ -->
+  <section id="screen-setup" class="screen" hidden>
+    <div class="auth-card">
+      <h1>📘 Digitales Klassenbuch</h1>
+      <p class="muted">Einmalige Einrichtung: Damit deine Einträge auf iPhone, iPad und Mac synchron sind, brauchst du ein <strong>eigenes, kostenloses Firebase-Projekt</strong> (Google, Spark-Plan, keine Kreditkarte nötig). Deine Daten liegen dann in deinem eigenen, privaten Projekt.</p>
+
+      <button type="button" id="btn-toggle-anleitung" class="btn-link">Anleitung anzeigen</button>
+      <ol id="setup-anleitung" class="anleitung" hidden>
+        <li>Gehe zu <code>console.firebase.google.com</code> und erstelle ein neues Projekt (Google-Analytics kannst du abwählen).</li>
+        <li>Klicke im Projekt auf das Web-Symbol <code>&lt;/&gt;</code>, um eine Web-App zu registrieren. Du erhältst ein Code-Snippet mit <code>firebaseConfig = {'{'}...{'}'}</code> — kopiere den gesamten Block.</li>
+        <li>Aktiviere links im Menü <strong>Build → Authentication → Sign-in method → E-Mail/Passwort</strong>.</li>
+        <li>Aktiviere <strong>Build → Firestore Database → Datenbank erstellen</strong> (Region z. B. <code>eur3</code>/Frankfurt für Deutschland), Start im „Produktionsmodus“.</li>
+        <li>Trage unter <strong>Firestore → Regeln</strong> Folgendes ein und veröffentliche es:
+          <pre class="code-block">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid}/entries/{entryId} {
+      allow read, write: if request.auth != null &amp;&amp; request.auth.uid == uid;
+    }
+  }
+}</pre>
+        </li>
+        <li>Füge unten den kopierten Code-Block ein und klicke auf „Weiter“.</li>
+      </ol>
+
+      <label for="setup-snippet">Firebase-Konfiguration einfügen</label>
+      <textarea id="setup-snippet" rows="6" placeholder="const firebaseConfig = {
+  apiKey: &quot;...&quot;,
+  authDomain: &quot;...&quot;,
+  projectId: &quot;...&quot;,
+  storageBucket: &quot;...&quot;,
+  messagingSenderId: &quot;...&quot;,
+  appId: &quot;...&quot;
+};"></textarea>
+      <p id="setup-error" class="error-text" hidden></p>
+      <button type="button" id="btn-setup-weiter" class="btn-primary">Weiter</button>
+      <p class="muted small">Diese Angaben sind kein Geheimnis – sie identifizieren nur dein Projekt. Der eigentliche Zugriffsschutz erfolgt über Anmeldung + Firestore-Regeln (siehe Anleitung).</p>
+    </div>
+  </section>
+
+  <!-- ============ AUTH: Anmelden / Registrieren ============ -->
+  <section id="screen-auth" class="screen" hidden>
+    <div class="auth-card">
+      <h1>📘 Digitales Klassenbuch</h1>
+      <div class="auth-toggle">
+        <button type="button" id="btn-mode-login" class="tab active">Anmelden</button>
+        <button type="button" id="btn-mode-register" class="tab">Registrieren</button>
+      </div>
+      <p class="muted">Melde dich mit denselben Zugangsdaten auf all deinen Geräten an – deine Einträge synchronisieren sich automatisch.</p>
+      <label for="auth-email">E-Mail</label>
+      <input type="email" id="auth-email" autocomplete="email">
+      <label for="auth-password">Passwort</label>
+      <input type="password" id="auth-password" autocomplete="current-password">
+      <label for="auth-password2" id="auth-password2-label" hidden>Passwort wiederholen</label>
+      <input type="password" id="auth-password2" autocomplete="new-password" hidden>
+      <p id="auth-error" class="error-text" hidden></p>
+      <button type="button" id="btn-auth-submit" class="btn-primary">Anmelden</button>
+      <button type="button" id="btn-forgot" class="btn-link">Passwort vergessen?</button>
+      <button type="button" id="btn-back-setup" class="btn-link">Verbindungseinstellung ändern</button>
+    </div>
+  </section>
+
+  <!-- ============ HAUPT-APP ============ -->
+  <section id="screen-main" class="screen" hidden>
+    <header class="topbar">
+      <h1>📘 Klassenbuch</h1>
+      <div class="topbar-status">
+        <span id="sync-status" class="badge badge-ok" title="Sync-Status">●</span>
+        <span id="user-email" class="muted small"></span>
+        <button type="button" id="btn-logout" class="btn-link">Abmelden</button>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="stunde" class="tab active">🎙️ Neue Stunde</button>
+      <button data-tab="eintraege" class="tab">📋 Einträge</button>
+      <button data-tab="auswertung" class="tab">📊 Auswertungen</button>
+      <button data-tab="warnung" class="tab">⚠️ Warnsystem</button>
+      <button data-tab="export" class="tab">⇅ Export</button>
+    </nav>
+
+    <main>
+      <!-- ---- Neue Stunde ---- -->
+      <section id="tab-stunde" class="tabpanel active">
+        <div class="card">
+          <div class="form-row">
+            <div class="field">
+              <label for="stunde-datum">Datum</label>
+              <input type="date" id="stunde-datum">
+            </div>
+            <div class="field">
+              <label for="stunde-klasse">Klasse</label>
+              <input type="text" id="stunde-klasse" list="klassen-list" placeholder="z. B. 9a">
+              <datalist id="klassen-list"></datalist>
+            </div>
+            <div class="field">
+              <label for="stunde-fach">Fach</label>
+              <input type="text" id="stunde-fach" list="faecher-list" placeholder="z. B. Deutsch">
+              <datalist id="faecher-list"></datalist>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="mic-row">
+            <button type="button" id="btn-mic" class="btn-mic">🎙️ Aufnahme starten</button>
+            <span id="mic-status" class="muted small">Bereit</span>
+          </div>
+          <p id="mic-unsupported" class="muted small" hidden>Spracherkennung wird von diesem Browser nicht unterstützt (v. a. Safari/iOS). Nutze stattdessen die Mikrofon-Taste deiner Bildschirmtastatur, um direkt in das Textfeld zu diktieren, oder tippe den Text ein.</p>
+          <label for="transcript">Diktat / Text</label>
+          <textarea id="transcript" rows="6" placeholder="z. B. 17 zweimal dazwischengerufen. 5, 11, 19 Hausaufgaben vergessen. 5 Referat zwei plus. 2 sehr gute Mitarbeit, 25 Note 4, 21 Note 2, 9 Note 3. 23 Tablet vergessen."></textarea>
+          <div class="btn-row">
+            <button type="button" id="btn-analysieren" class="btn-primary">Diktat analysieren</button>
+            <button type="button" id="btn-transcript-clear" class="btn-secondary">Leeren</button>
+          </div>
+        </div>
+
+        <div class="card" id="review-card" hidden>
+          <h2>Erkannte Einträge — bitte prüfen</h2>
+          <p class="muted small">Zeilen mit gelbem Rand konnte der Parser nicht sicher zuordnen — bitte kontrollieren.</p>
+          <div class="table-scroll">
+            <table id="review-table">
+              <thead>
+                <tr>
+                  <th></th><th>Schüler</th><th>Kategorie</th><th>Beschreibung</th><th>Note</th><th>Typ</th><th>Priorität</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="review-tbody"></tbody>
+            </table>
+          </div>
+          <div class="btn-row">
+            <button type="button" id="btn-review-add" class="btn-secondary">+ Zeile hinzufügen</button>
+            <button type="button" id="btn-review-save" class="btn-primary">Ausgewählte Einträge speichern</button>
+          </div>
+        </div>
+
+        <div class="card" id="summary-card" hidden>
+          <h2>Zusammenfassung</h2>
+          <div id="summary-content"></div>
+          <div class="btn-row">
+            <button type="button" id="btn-export-stunde" class="btn-secondary">Diese Stunde als Excel exportieren</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- Alle Einträge ---- -->
+      <section id="tab-eintraege" class="tabpanel">
+        <div class="card">
+          <div class="filter-grid">
+            <input type="text" id="f-suche" placeholder="Suche…">
+            <select id="f-klasse"><option value="">Alle Klassen</option></select>
+            <select id="f-fach"><option value="">Alle Fächer</option></select>
+            <select id="f-kategorie"><option value="">Alle Kategorien</option></select>
+            <select id="f-typ"><option value="">Alle Typen</option><option value="positiv">Positiv</option><option value="negativ">Negativ</option><option value="neutral">Neutral</option></select>
+            <select id="f-prioritaet"><option value="">Alle Prioritäten</option><option value="🟢">🟢 Positiv</option><option value="⚪">⚪ Neutral</option><option value="🟠">🟠 Beobachtungswürdig</option><option value="🔴">🔴 Dringend</option></select>
+            <input type="date" id="f-von" title="Von">
+            <input type="date" id="f-bis" title="Bis">
+            <button type="button" id="btn-filter-reset" class="btn-secondary">Zurücksetzen</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="list-header">
+            <span id="eintraege-count" class="muted small"></span>
+            <button type="button" id="btn-export-filtered" class="btn-secondary">Auswahl als Excel exportieren</button>
+          </div>
+          <div class="table-scroll">
+            <table id="eintraege-table">
+              <thead>
+                <tr><th>Datum</th><th>Klasse</th><th>Fach</th><th>Schüler</th><th>Kategorie</th><th>Beschreibung</th><th>Note</th><th>Typ</th><th>Prio</th><th></th></tr>
+              </thead>
+              <tbody id="eintraege-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- Auswertungen ---- -->
+      <section id="tab-auswertung" class="tabpanel">
+        <div class="card">
+          <div class="filter-grid">
+            <select id="a-klasse"><option value="">Alle Klassen</option></select>
+            <select id="a-fach"><option value="">Alle Fächer</option></select>
+            <input type="date" id="a-von" title="Zeitraum von">
+            <input type="date" id="a-bis" title="Zeitraum bis">
+          </div>
+        </div>
+        <div class="card">
+          <div class="stat-cards" id="stat-cards"></div>
+        </div>
+        <div class="card">
+          <h2>Schülerprofile</h2>
+          <div class="table-scroll">
+            <table id="profile-table">
+              <thead>
+                <tr><th>Klasse</th><th>Schüler</th><th>Ø gesamt</th><th>Ø Zeitraum</th><th>Noten</th><th>🟢</th><th>🔴+🟠</th><th>Letzter Eintrag</th><th></th></tr>
+              </thead>
+              <tbody id="profile-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card" id="report-card" hidden>
+          <div class="list-header">
+            <h2>Bericht</h2>
+            <button type="button" id="btn-report-copy" class="btn-secondary">Kopieren</button>
+          </div>
+          <pre id="report-content" class="code-block"></pre>
+        </div>
+      </section>
+
+      <!-- ---- Frühwarnsystem ---- -->
+      <section id="tab-warnung" class="tabpanel">
+        <div class="card" id="warnungen-card">
+          <div id="warnungen-list"></div>
+        </div>
+        <div class="card">
+          <button type="button" id="btn-toggle-settings" class="btn-link">Schwellenwerte anpassen</button>
+          <div id="warn-settings" class="settings-grid" hidden></div>
+          <div class="btn-row" id="warn-settings-save-row" hidden>
+            <button type="button" id="btn-settings-save" class="btn-primary">Einstellungen speichern</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- Export/Import ---- -->
+      <section id="tab-export" class="tabpanel">
+        <div class="card">
+          <h2>Export</h2>
+          <p class="muted small">Export erfolgt immer als .xlsx mit gleichbleibender Spaltenstruktur — Tabellen aus mehreren Exporten lassen sich später problemlos wieder zusammenführen.</p>
+          <button type="button" id="btn-export-all" class="btn-primary">Gesamten Bestand als Excel exportieren</button>
+        </div>
+        <div class="card">
+          <h2>Import</h2>
+          <p class="muted small">Eine zuvor exportierte .xlsx-Datei einlesen und mit dem aktuellen Bestand zusammenführen (Duplikate werden über die ID vermieden).</p>
+          <input type="file" id="import-file" accept=".xlsx,.xls">
+          <button type="button" id="btn-import" class="btn-primary">Importieren</button>
+          <p id="import-status" class="muted small"></p>
+        </div>
+        <div class="card">
+          <h2>Konto &amp; Synchronisation</h2>
+          <p class="muted small">Angemeldet als <strong id="export-user-email"></strong>. Auf allen Geräten mit denselben Zugangsdaten anmelden, um zu synchronisieren.</p>
+          <button type="button" id="btn-change-firebase" class="btn-secondary">Firebase-Verbindung ändern</button>
+        </div>
+      </section>
+    </main>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="js/vendor/xlsx.full.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/firebaseSync.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/warnings.js"></script>
+<script src="js/exportImport.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
