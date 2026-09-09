@@ -54,6 +54,19 @@
     return 'Sonstige Mitarbeit';
   }
 
+  // Auswahlliste der Klassenliste für eine Klasse, oder null, falls dort
+  // noch keine Liste hinterlegt ist (dann greift der Aufrufer auf ein
+  // Freitextfeld zurück, z. B. für Klassen mit reiner Nummern-Diktion).
+  function studentSelectHtml(klasse, selectedId, cls) {
+    const roster = Store.getRosterList(klasse);
+    if (!roster.length) return null;
+    const options = roster.map((s) => {
+      const label = s.nachname ? `${s.vorname} ${s.nachname}` : s.vorname;
+      return `<option value="${escapeHtml(s.id)}" ${s.id === selectedId ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+    return `<select class="${cls || 'in-schueler'}"><option value="">– auswählen –</option>${options}</select>`;
+  }
+
   function buildSelect(cls, options, selected, labels) {
     return `<select class="${cls}">` + options.map((o) =>
       `<option value="${escapeHtml(o)}" ${o === selected ? 'selected' : ''}>${escapeHtml(labels ? labels[o] : o)}</option>`
@@ -272,9 +285,12 @@
   function buildReviewRow(r) {
     const tr = document.createElement('tr');
     if (r.unsicher) tr.classList.add('unsicher');
+    const klasse = $('#stunde-klasse').value.trim();
+    const schuelerCell = studentSelectHtml(klasse, r.schueler)
+      || `<input type="text" class="in-schueler" value="${escapeHtml(r.schueler || '')}" style="width:60px" placeholder="Nr.">`;
     tr.innerHTML = `
       <td><input type="checkbox" class="chk" checked></td>
-      <td><input type="text" class="in-schueler" value="${escapeHtml(r.schueler || '')}" style="width:60px"><br><small class="in-schueler-name muted"></small></td>
+      <td>${schuelerCell}${r.schuelerKandidaten ? '<br><small class="muted">mehrere gleichnamige Kinder – bitte auswählen</small>' : ''}</td>
       <td>${buildSelect('in-kategorie', Parser.KATEGORIEN, r.kategorie)}</td>
       <td><input type="text" class="in-beschreibung" value="${escapeHtml(r.beschreibung || '')}" style="min-width:200px"></td>
       <td><input type="text" class="in-note" value="${escapeHtml(r.noteLabel || '')}" style="width:55px" placeholder="–"></td>
@@ -283,14 +299,6 @@
       <td><button type="button" class="row-btn" title="Zeile entfernen">✕</button></td>
     `;
     tr.querySelector('.row-btn').addEventListener('click', () => tr.remove());
-    const nrInput = tr.querySelector('.in-schueler');
-    const nameHint = tr.querySelector('.in-schueler-name');
-    const updateNameHint = () => {
-      const name = Store.getName($('#stunde-klasse').value.trim(), nrInput.value.trim());
-      nameHint.textContent = name || '';
-    };
-    nrInput.addEventListener('input', updateNameHint);
-    updateNameHint();
     return tr;
   }
 
@@ -302,7 +310,8 @@
 
   $('#btn-analysieren').addEventListener('click', () => {
     const text = $('#transcript').value;
-    const parsed = Parser.parseTranscript(text);
+    const klasse = $('#stunde-klasse').value.trim();
+    const parsed = Parser.parseTranscript(text, { roster: Store.getRosterList(klasse) });
     if (!parsed.length) { toast('Kein auswertbarer Text gefunden.'); return; }
     renderReviewTable(parsed);
     $('#review-card').hidden = false;
@@ -419,11 +428,13 @@
   }
 
   function openEditRow(tr, e) {
+    const schuelerCell = studentSelectHtml(e.klasse, e.schueler, 'ei-schueler')
+      || `<input type="text" class="ei-schueler" value="${escapeHtml(e.schueler)}" style="width:50px">`;
     tr.innerHTML = `
       <td><input type="date" class="ei-datum" value="${e.datum}" style="width:120px"></td>
       <td><input type="text" class="ei-klasse" value="${escapeHtml(e.klasse)}" style="width:55px"></td>
       <td><input type="text" class="ei-fach" value="${escapeHtml(e.fach)}" style="width:80px"></td>
-      <td><input type="text" class="ei-schueler" value="${escapeHtml(e.schueler)}" style="width:50px"></td>
+      <td>${schuelerCell}</td>
       <td>${buildSelect('ei-kategorie', Parser.KATEGORIEN, e.kategorie)}</td>
       <td><input type="text" class="ei-beschreibung" value="${escapeHtml(e.beschreibung)}" style="min-width:170px"></td>
       <td><input type="text" class="ei-note" value="${escapeHtml(e.noteLabel || '')}" style="width:50px"></td>
@@ -592,15 +603,25 @@
   });
 
   // ================================================== Tab: Klassenlisten
-  function buildRosterRow(nr, name) {
+  function buildRosterRow(s) {
     const tr = document.createElement('tr');
+    tr.dataset.id = s.id;
     tr.innerHTML = `
-      <td><input type="text" class="ro-nr" value="${escapeHtml(nr || '')}" style="width:70px"></td>
-      <td><input type="text" class="ro-name" value="${escapeHtml(name || '')}" style="min-width:200px"></td>
+      <td><input type="text" class="ro-vorname" value="${escapeHtml(s.vorname || '')}" style="min-width:140px"></td>
+      <td><input type="text" class="ro-nachname" value="${escapeHtml(s.nachname || '')}" style="min-width:140px"></td>
       <td><button type="button" class="row-btn" title="Zeile entfernen">✕</button></td>
     `;
     tr.querySelector('.row-btn').addEventListener('click', () => tr.remove());
     return tr;
+  }
+
+  // Nächste freie ID unter Berücksichtigung bereits gespeicherter UND
+  // gerade erst (noch ungespeichert) in der Tabelle stehender Zeilen.
+  function nextRosterIdForTable(klasse) {
+    const persisted = Store.getRosterList(klasse).map((s) => parseInt(s.id, 10));
+    const inTable = $all('#roster-tbody tr').map((tr) => parseInt(tr.dataset.id, 10));
+    const all = persisted.concat(inTable).filter((n) => !isNaN(n));
+    return String((all.length ? Math.max(...all) : 0) + 1);
   }
 
   function renderRosterTable() {
@@ -608,30 +629,42 @@
     const tbody = $('#roster-tbody');
     tbody.innerHTML = '';
     if (!klasse) return;
-    const namen = Store.loadRoster()[klasse] || {};
-    const nummern = Object.keys(namen).sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
-    nummern.forEach((nr) => tbody.appendChild(buildRosterRow(nr, namen[nr])));
+    Store.getRosterList(klasse).forEach((s) => tbody.appendChild(buildRosterRow(s)));
   }
 
   $('#roster-klasse').addEventListener('change', renderRosterTable);
   $('#roster-klasse').addEventListener('input', renderRosterTable);
 
   $('#btn-roster-add').addEventListener('click', () => {
-    $('#roster-tbody').appendChild(buildRosterRow('', ''));
+    const klasse = $('#roster-klasse').value.trim();
+    if (!klasse) { toast('Bitte zuerst eine Klasse angeben.'); return; }
+    $('#roster-tbody').appendChild(buildRosterRow({ id: nextRosterIdForTable(klasse), vorname: '', nachname: '' }));
+  });
+
+  $('#btn-roster-bulk-add').addEventListener('click', () => {
+    const klasse = $('#roster-klasse').value.trim();
+    if (!klasse) { toast('Bitte zuerst eine Klasse angeben.'); return; }
+    const geparst = Parser.parseNameList($('#roster-bulk').value);
+    if (!geparst.length) { toast('Keine Namen erkannt.'); return; }
+    geparst.forEach((s) => {
+      $('#roster-tbody').appendChild(buildRosterRow({ id: nextRosterIdForTable(klasse), vorname: s.vorname, nachname: s.nachname }));
+    });
+    $('#roster-bulk').value = '';
+    toast(`${geparst.length} Namen eingelesen — bitte prüfen und speichern.`);
   });
 
   $('#btn-roster-save').addEventListener('click', async () => {
     const klasse = $('#roster-klasse').value.trim();
     if (!klasse) { toast('Bitte zuerst eine Klasse angeben.'); return; }
-    const namenMap = {};
+    const schuelerListe = [];
     $all('#roster-tbody tr').forEach((tr) => {
-      const nr = tr.querySelector('.ro-nr').value.trim();
-      const name = tr.querySelector('.ro-name').value.trim();
-      if (nr && name) namenMap[nr] = name;
+      const vorname = tr.querySelector('.ro-vorname').value.trim();
+      const nachname = tr.querySelector('.ro-nachname').value.trim();
+      if (vorname) schuelerListe.push({ id: tr.dataset.id, vorname, nachname });
     });
     try {
-      await Store.saveRosterClass(klasse, namenMap);
-      $('#roster-status').textContent = `Klassenliste ${klasse} gespeichert (${Object.keys(namenMap).length} Namen).`;
+      await Store.saveRosterClass(klasse, schuelerListe);
+      $('#roster-status').textContent = `Klassenliste ${klasse} gespeichert (${schuelerListe.length} Namen).`;
       toast('Klassenliste gespeichert.');
     } catch (e) {
       $('#roster-status').textContent = 'Fehler: ' + e.message;

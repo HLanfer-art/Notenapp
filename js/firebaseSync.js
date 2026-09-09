@@ -9,10 +9,14 @@
  * wieder eine Verbindung besteht.
  *
  * Datenmodell:
- *  - users/{uid}/entries/{entryId} — Klassenbuch-Einträge
- *  - users/{uid}/roster/{klasse}   — Klassenlisten (Nummer -> Name),
- *    ausschließlich zur Anzeige in der App; die Einträge selbst
- *    speichern weiterhin nur die Nummer.
+ *  - users/{uid}/entries/{entryId} — Klassenbuch-Einträge (das Feld
+ *    "schueler" ist eine ID, die auf einen Eintrag der Klassenliste
+ *    verweist — oder, bei Klassen ohne Liste, weiterhin eine frei
+ *    diktierte Nummer).
+ *  - users/{uid}/roster/{klasse}   — Klassenliste: { schueler: [{id,
+ *    vorname, nachname}], aktualisiertAm }. Ältere Dokumente im Format
+ *    { namen: {nr: "Vorname Nachname"} } werden beim Lesen automatisch
+ *    umgewandelt.
  * Sicherheitsregeln (in der Firebase-Konsole -> Firestore -> Regeln)
  * müssen sicherstellen, dass jede:r Nutzer:in nur eigene Daten lesen/
  * schreiben kann (siehe README.md für die exakten Regeln).
@@ -30,7 +34,7 @@ const FirebaseSync = (() => {
 
   const listeners = {
     entries: [],   // callback(entries[])
-    roster: [],    // callback({klasse: {nr: name}})
+    roster: [],    // callback({klasse: [{id,vorname,nachname}]})
     auth: [],      // callback(user|null)
   };
 
@@ -125,12 +129,25 @@ const FirebaseSync = (() => {
     );
   }
 
+  // Wandelt ein älteres Dokument im Format { namen: {nr: "Vorname Nachname"} }
+  // in die aktuelle Listenform { schueler: [{id,vorname,nachname}] } um.
+  function migrateLegacyRosterDoc(data) {
+    if (Array.isArray(data.schueler)) return data.schueler;
+    if (data.namen) {
+      return Object.entries(data.namen).map(([nr, name]) => {
+        const parts = String(name).trim().split(/\s+/);
+        return { id: nr, vorname: parts[0] || '', nachname: parts.slice(1).join(' ') };
+      });
+    }
+    return [];
+  }
+
   function subscribeRoster() {
     if (unsubscribeRosterSnapshot) unsubscribeRosterSnapshot();
     unsubscribeRosterSnapshot = rosterCollection().onSnapshot(
       (snap) => {
         const roster = {};
-        snap.forEach((doc) => { roster[doc.id] = (doc.data() || {}).namen || {}; });
+        snap.forEach((doc) => { roster[doc.id] = migrateLegacyRosterDoc(doc.data() || {}); });
         emitRoster(roster);
       },
       (err) => console.error('Fehler beim Synchronisieren der Klassenlisten:', err)
@@ -194,10 +211,10 @@ const FirebaseSync = (() => {
     }
   }
 
-  // Speichert die komplette Namensliste einer Klasse (Nummer -> Name).
-  async function saveRosterClass(klasse, namenMap) {
+  // Speichert die komplette Klassenliste (Array aus {id, vorname, nachname}).
+  async function saveRosterClass(klasse, schuelerListe) {
     await rosterCollection().doc(klasse).set({
-      namen: namenMap,
+      schueler: schuelerListe,
       aktualisiertAm: new Date().toISOString(),
     });
   }

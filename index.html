@@ -244,7 +244,7 @@ service cloud.firestore {
       <!-- ---- Klassenlisten ---- -->
       <section id="tab-klassenlisten" class="tabpanel">
         <div class="card">
-          <p class="muted small">Namen werden ausschließlich in deinem eigenen, privaten Firebase-Projekt gespeichert — nirgendwo sonst. Trage sie hier direkt in der App ein. Die Diktatfunktion bleibt weiterhin nummernbasiert; die Namen dienen nur der Anzeige in Tabellen, Auswertungen und Berichten.</p>
+          <p class="muted small">Namen werden ausschließlich in deinem eigenen, privaten Firebase-Projekt gespeichert — nirgendwo sonst. Beim Diktieren einfach den Vornamen sprechen (z. B. „Max Hausaufgaben vergessen"); bei zwei Kindern mit demselben Vornamen zusätzlich den Nachnamen nennen, sonst fragt die Review-Tabelle nach.</p>
           <div class="form-row">
             <div class="field">
               <label for="roster-klasse">Klasse</label>
@@ -253,9 +253,19 @@ service cloud.firestore {
           </div>
         </div>
         <div class="card">
+          <h2>Ganze Liste einfügen</h2>
+          <p class="muted small">Eine Person pro Zeile, z. B. aus einer Kursliste kopiert. „Nachname, Vorname" und „Vorname Nachname" werden beide erkannt, vorangestellte Nummern/Aufzählungszeichen automatisch entfernt.</p>
+          <textarea id="roster-bulk" rows="6" placeholder="Meier, Max
+Schmidt, Lena
+Klein, Tom"></textarea>
+          <div class="btn-row">
+            <button type="button" id="btn-roster-bulk-add" class="btn-secondary">Liste einlesen</button>
+          </div>
+        </div>
+        <div class="card">
           <div class="table-scroll">
             <table id="roster-table">
-              <thead><tr><th>Nummer</th><th>Name</th><th></th></tr></thead>
+              <thead><tr><th>Vorname</th><th>Nachname</th><th></th></tr></thead>
               <tbody id="roster-tbody"></tbody>
             </table>
           </div>
