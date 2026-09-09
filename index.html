@@ -254,10 +254,12 @@ service cloud.firestore {
         </div>
         <div class="card">
           <h2>Ganze Liste einfügen</h2>
-          <p class="muted small">Eine Person pro Zeile, z. B. aus einer Kursliste kopiert. „Nachname, Vorname" und „Vorname Nachname" werden beide erkannt, vorangestellte Nummern/Aufzählungszeichen automatisch entfernt.</p>
-          <textarea id="roster-bulk" rows="6" placeholder="Meier, Max
-Schmidt, Lena
-Klein, Tom"></textarea>
+          <p class="muted small">Eine Person pro Zeile („Nachname, Vorname" oder „Vorname Nachname") — oder einfach nur Vornamen, mit Kommas aneinandergereiht. Vorangestellte Nummern/Aufzählungszeichen werden automatisch entfernt.</p>
+          <textarea id="roster-bulk" rows="6" placeholder="Max, Lena, Tom, Anna
+
+oder klassisch:
+Meier, Max
+Schmidt, Lena"></textarea>
           <div class="btn-row">
             <button type="button" id="btn-roster-bulk-add" class="btn-secondary">Liste einlesen</button>
           </div>
