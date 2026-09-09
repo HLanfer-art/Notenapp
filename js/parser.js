@@ -7,6 +7,18 @@
  * einmal pro Unterrichtsstunde über die Formularfelder gesetzt — das macht
  * die Erkennung der eigentlichen Beobachtungen deutlich zuverlässiger.
  *
+ * Schüler werden über Vornamen erkannt: parseTranscript(text, { roster })
+ * bekommt die Klassenliste der aktuell gewählten Klasse (Array aus
+ * {id, vorname, nachname}) und gleicht gesprochene Wörter NUR gegen diese
+ * bekannten Vornamen ab — kein generisches "großgeschriebenes Wort ist ein
+ * Name"-Raten, das im Deutschen wegen der Groß-/Kleinschreibung von
+ * Substantiven viel zu viele Fehltreffer produzieren würde. Gibt es zum
+ * Vornamen mehrere Kinder in der Klasse, versucht der Parser zusätzlich
+ * den folgenden Nachnamen zu lesen; bleibt es mehrdeutig, wird der Eintrag
+ * als unsicher markiert (Kandidatenliste), damit er in der Review-Tabelle
+ * per Auswahlliste aufgelöst werden kann. Ziffern funktionieren weiterhin
+ * als Fallback (z. B. für Klassen ohne hinterlegte Liste).
+ *
  * WICHTIG: Der Parser arbeitet heuristisch (Mustererkennung), nicht mit
  * echtem Sprachverständnis. Er liefert einen Vorschlag, der in der App vor
  * dem Speichern immer geprüft/korrigiert werden kann und soll.
@@ -114,45 +126,115 @@ const Parser = (() => {
     return 'Sonstige Mitarbeit';
   }
 
-  // Zerlegt einen Satz in Blöcke von führenden Zahlen ("Schülernummern")
-  // gefolgt von einem Beschreibungstext. Mehrere Nummern ohne eigenen Text
-  // ("5, 11, 19 Hausaufgaben vergessen") werden gesammelt, bis ein Block
-  // mit Text folgt, und teilen sich dann diesen Text.
-  function splitSentenceIntoBlocks(sentence) {
+  // Baut aus der Klassenliste einen Namensindex zum schnellen Abgleich.
+  function buildNameIndex(roster) {
+    const byVorname = new Map(); // lower(vorname) -> [{id,vorname,nachname}]
+    const byFullName = new Map(); // lower("vorname nachname") -> {id,vorname,nachname}
+    (roster || []).forEach((s) => {
+      if (!s || !s.vorname) return;
+      const vKey = s.vorname.trim().toLowerCase();
+      if (!byVorname.has(vKey)) byVorname.set(vKey, []);
+      byVorname.get(vKey).push(s);
+      if (s.nachname) {
+        byFullName.set(`${s.vorname.trim()} ${s.nachname.trim()}`.toLowerCase(), s);
+      }
+    });
+    return byVorname.size ? { byVorname, byFullName } : null;
+  }
+
+  const NAME_TOKEN_RE = /^([A-ZÄÖÜ][\wÀ-ÿ'-]*)\.?\s*/;
+
+  // Versucht am Anfang von `text` genau einen bekannten Vornamen (optional
+  // gefolgt vom Nachnamen zur Auflösung von Mehrfachtreffern) zu lesen.
+  function extractOneName(text, nameIndex) {
+    const m = text.match(NAME_TOKEN_RE);
+    if (!m) return null;
+    const kandidaten = nameIndex.byVorname.get(m[1].toLowerCase());
+    if (!kandidaten) return null;
+
+    const rest = text.slice(m[0].length);
+    if (kandidaten.length > 1) {
+      const m2 = rest.match(NAME_TOKEN_RE);
+      if (m2) {
+        const voll = nameIndex.byFullName.get(`${m[1]} ${m2[1]}`.toLowerCase());
+        if (voll) return { consumed: m[0].length + m2[0].length, resolved: voll, kandidaten: null };
+      }
+      return { consumed: m[0].length, resolved: null, kandidaten };
+    }
+    return { consumed: m[0].length, resolved: kandidaten[0], kandidaten: null };
+  }
+
+  // Liest am Anfang von `text` eine Folge von Schüler-Identifikatoren:
+  // entweder Ziffern ("5, 11 und 19 ...") oder — falls eine Klassenliste
+  // übergeben wurde — bekannte Vornamen ("Max und Lena ..."). Numerisch hat
+  // Vorrang, damit bestehende Diktate mit Nummern unverändert funktionieren.
+  function extractLeadingIdentifiers(text, nameIndex) {
+    const numRe = /^((?:\d{1,3})(?:\s+und\s+\d{1,3})*)\s*(.*)$/i;
+    const numMatch = text.match(numRe);
+    if (numMatch) {
+      const identifiers = numMatch[1].split(/\s+und\s+/i).map((n) => ({
+        id: n.trim(), unsicher: false, kandidaten: null,
+      }));
+      return { identifiers, rest: numMatch[2].trim() };
+    }
+
+    if (!nameIndex) return null;
+
+    const identifiers = [];
+    let remaining = text;
+    for (;;) {
+      const found = extractOneName(remaining, nameIndex);
+      if (!found) break;
+      remaining = remaining.slice(found.consumed);
+      identifiers.push(found.resolved
+        ? { id: found.resolved.id, unsicher: false, kandidaten: null }
+        : { id: null, unsicher: true, kandidaten: found.kandidaten });
+      const und = remaining.match(/^und\s+/i);
+      if (!und) break;
+      remaining = remaining.slice(und[0].length);
+    }
+    if (!identifiers.length) return null;
+    return { identifiers, rest: remaining.trim() };
+  }
+
+  // Zerlegt einen Satz in Blöcke von führenden Schüler-Identifikatoren
+  // gefolgt von einem Beschreibungstext. Mehrere Identifikatoren ohne
+  // eigenen Text ("5, 11, 19 Hausaufgaben vergessen" bzw. "Max, Lena, Tom
+  // Hausaufgaben vergessen") werden gesammelt, bis ein Block mit Text
+  // folgt, und teilen sich dann diesen Text.
+  function splitSentenceIntoBlocks(sentence, nameIndex) {
     const parts = sentence.split(',').map((p) => p.trim()).filter(Boolean);
     const blocks = [];
     let pending = [];
 
-    const leadingNumRe = /^((?:\d{1,3})(?:\s+und\s+\d{1,3})*)\s*(.*)$/i;
-
     parts.forEach((part) => {
-      const m = part.match(leadingNumRe);
-      if (m) {
-        const numbers = m[1].split(/\s+und\s+/i).map((n) => n.trim());
-        const rest = m[2].trim();
-        if (rest === '') {
-          pending.push(...numbers);
+      const extracted = extractLeadingIdentifiers(part, nameIndex);
+      if (extracted) {
+        if (extracted.rest === '') {
+          pending = pending.concat(extracted.identifiers);
         } else {
-          blocks.push({ numbers: pending.concat(numbers), text: rest });
+          blocks.push({ identifiers: pending.concat(extracted.identifiers), text: extracted.rest });
           pending = [];
         }
       } else if (part) {
         if (pending.length) {
-          blocks.push({ numbers: pending, text: part });
+          blocks.push({ identifiers: pending, text: part });
           pending = [];
         } else {
           // Kein Schüler-Bezug erkennbar -> allgemeine Beobachtung.
-          blocks.push({ numbers: [], text: part });
+          blocks.push({ identifiers: [], text: part });
         }
       }
     });
-    // Übrig gebliebene reine Nummern ohne Text (z.B. Versprecher) verwerfen.
+    // Übrig gebliebene reine Identifikatoren ohne Text (z.B. Versprecher) verwerfen.
     return blocks;
   }
 
-  function parseTranscript(transcript) {
+  function parseTranscript(transcript, options) {
     const text = (transcript || '').trim();
     if (!text) return [];
+
+    const nameIndex = buildNameIndex(options && options.roster);
 
     const sentences = text
       .split(/(?<=[.!?])\s+|\n+/)
@@ -164,7 +246,7 @@ const Parser = (() => {
     sentences.forEach((sentence) => {
       const clean = sentence.replace(/[.!?]+$/, '').trim();
       if (!clean) return;
-      const blocks = splitSentenceIntoBlocks(clean);
+      const blocks = splitSentenceIntoBlocks(clean, nameIndex);
 
       blocks.forEach((block) => {
         const grade = extractGrade(block.text);
@@ -174,7 +256,7 @@ const Parser = (() => {
         if (!kategorie) {
           if (grade) {
             kategorie = 'Mündliche Leistung';
-          } else if (block.numbers.length === 0) {
+          } else if (block.identifiers.length === 0) {
             kategorie = 'Organisatorisches';
           } else {
             kategorie = 'Sonstiges';
@@ -186,10 +268,12 @@ const Parser = (() => {
         const prioritaet = detectPrioritaet(typ, block.text, grade ? grade.value : null);
         const notenbereich = grade ? notenbereichFor(kategorie, block.text) : null;
 
-        const schuelerListe = block.numbers.length ? block.numbers : [''];
-        schuelerListe.forEach((nr) => {
+        const schuelerListe = block.identifiers.length ? block.identifiers : [{ id: '', unsicher: false, kandidaten: null }];
+        schuelerListe.forEach((ident) => {
           results.push({
-            schueler: nr,
+            schueler: ident.id || '',
+            schuelerUnsicher: ident.unsicher,
+            schuelerKandidaten: ident.kandidaten,
             kategorie,
             beschreibung: block.text,
             note: grade ? grade.value : null,
@@ -197,7 +281,7 @@ const Parser = (() => {
             notenbereich,
             typ,
             prioritaet,
-            unsicher,
+            unsicher: unsicher || ident.unsicher,
             quelle: sentence,
           });
         });
@@ -207,10 +291,31 @@ const Parser = (() => {
     return results;
   }
 
+  // Zerlegt eine eingefügte Namensliste (eine Person pro Zeile) in
+  // {vorname, nachname}. Erkennt "Nachname, Vorname" (häufig bei
+  // alphabetischen Schullisten) ebenso wie "Vorname Nachname" und
+  // entfernt vorangestellte Listenzeichen ("1.", "1)", "-", "•").
+  function parseNameList(text) {
+    return (text || '')
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*(?:\d{1,3}[.)]|[-•*])\s*/, '').trim())
+      .filter(Boolean)
+      .map((line) => {
+        if (line.includes(',')) {
+          const [nachname, vorname] = line.split(',').map((p) => p.trim());
+          return { vorname: vorname || '', nachname: nachname || '' };
+        }
+        const teile = line.split(/\s+/);
+        return { vorname: teile[0] || '', nachname: teile.slice(1).join(' ') };
+      })
+      .filter((s) => s.vorname);
+  }
+
   return {
     KATEGORIEN,
     PRIORITAETEN,
     parseTranscript,
+    parseNameList,
     gradeToNumber,
   };
 })();

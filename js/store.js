@@ -27,7 +27,7 @@ const Store = (() => {
   };
 
   let cache = [];
-  let rosterCache = {}; // { klasse: { nr: name } }
+  let rosterCache = {}; // { klasse: [{id, vorname, nachname}] }
   const cacheListeners = [];
   const rosterListeners = [];
 
@@ -57,15 +57,31 @@ const Store = (() => {
     return rosterCache;
   }
 
-  // Name für Klasse+Nummer, oder null, falls nicht hinterlegt.
-  function getName(klasse, schueler) {
-    if (!klasse || !schueler) return null;
-    const klassenListe = rosterCache[klasse];
-    return (klassenListe && klassenListe[schueler]) || null;
+  // Klassenliste (Array) für eine Klasse, oder leeres Array.
+  function getRosterList(klasse) {
+    return (klasse && rosterCache[klasse]) || [];
   }
 
-  async function saveRosterClass(klasse, namenMap) {
-    await FirebaseSync.saveRosterClass(klasse, namenMap);
+  function findRosterEntry(klasse, schuelerId) {
+    if (!klasse || !schuelerId) return null;
+    return getRosterList(klasse).find((s) => s.id === schuelerId) || null;
+  }
+
+  // Anzeigename für Klasse+ID, oder null, falls nicht hinterlegt.
+  function getName(klasse, schuelerId) {
+    const s = findRosterEntry(klasse, schuelerId);
+    if (!s) return null;
+    return s.nachname ? `${s.vorname} ${s.nachname}` : s.vorname;
+  }
+
+  // Nächste freie, fortlaufende ID für eine neue Klassenlisten-Zeile.
+  function nextRosterId(klasse) {
+    const ids = getRosterList(klasse).map((s) => parseInt(s.id, 10)).filter((n) => !isNaN(n));
+    return String((ids.length ? Math.max(...ids) : 0) + 1);
+  }
+
+  async function saveRosterClass(klasse, schuelerListe) {
+    await FirebaseSync.saveRosterClass(klasse, schuelerListe);
   }
 
   async function addEntries(newEntries) {
@@ -134,7 +150,10 @@ const Store = (() => {
     setRosterCache,
     onRosterChange,
     loadRoster,
+    getRosterList,
+    findRosterEntry,
     getName,
+    nextRosterId,
     saveRosterClass,
     DEFAULT_SETTINGS,
   };

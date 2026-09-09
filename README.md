@@ -12,10 +12,15 @@ Projektanweisung ("Digitales Klassenbuch") technisch um.
 ## Funktionen
 
 - 🎙️ **Diktierfunktion**: Beobachtungen frei per Mikrofon diktieren (Web
-  Speech API); ein heuristischer Parser zerlegt den Text automatisch in
-  einzelne Einträge (Schülernummer, Kategorie, Note, Positiv/Negativ,
-  Priorität) — **immer zur Kontrolle in einer editierbaren Tabelle**,
-  bevor gespeichert wird.
+  Speech API), Schüler werden dabei über ihren **Vornamen** angesprochen
+  (z. B. „Max Hausaufgaben vergessen"); ein heuristischer Parser gleicht
+  gesprochene Namen gegen die hinterlegte Klassenliste ab und zerlegt den
+  Text automatisch in einzelne Einträge (Schüler, Kategorie, Note,
+  Positiv/Negativ, Priorität) — **immer zur Kontrolle in einer editierbaren
+  Tabelle**, bevor gespeichert wird. Gibt es zwei Kinder mit demselben
+  Vornamen, zusätzlich den Nachnamen nennen (z. B. „Max Meier") oder in der
+  Review-Tabelle per Auswahlliste auflösen. Klassen ohne hinterlegte Liste
+  funktionieren weiterhin mit diktierten Nummern.
 - 📋 **Alle Einträge**: Volltextsuche + Filter (Klasse, Fach, Kategorie,
   Priorität, Typ, Zeitraum), Inline-Bearbeitung, Löschen.
 - 📊 **Auswertungen**: Gesamtdurchschnitt und Durchschnitt für einen frei
@@ -31,19 +36,24 @@ Projektanweisung ("Digitales Klassenbuch") technisch um.
   Positiv/Negativ, Priorität). Mehrere exportierte Tabellen lassen sich
   über die mitgeführte ID wieder verlustfrei zu einem Bestand
   zusammenführen.
-- 👥 **Klassenlisten**: Nummer↔Name pro Klasse direkt in der App pflegen
-  (Tab „Klassenlisten"). Namen werden dort ergänzt, wo bisher „Schüler X"
-  stand (Tabellen, Auswertungen, Frühwarnsystem, Zusammenfassung, Bericht,
-  optional im Excel-Export) — die Diktatfunktion selbst bleibt weiterhin
-  rein nummernbasiert.
+- 👥 **Klassenlisten**: Vorname/Nachname pro Klasse direkt in der App
+  pflegen (Tab „Klassenlisten") — einzeln oder per **Listen-Import**
+  (eine Person pro Zeile einfügen, z. B. aus einer Kursliste kopiert;
+  „Nachname, Vorname" und „Vorname Nachname" werden automatisch erkannt
+  und in einzelne Schüler-Einträge aufgeteilt). Diese Liste ist die
+  Grundlage für die namensbasierte Diktierfunktion und wird außerdem in
+  Tabellen, Auswertungen, Frühwarnsystem, Zusammenfassung, Bericht und
+  optional im Excel-Export angezeigt.
 - 🔄 **Synchronisation**: Cloud Firestore mit Offline-Cache — Einträge
   lassen sich auch ohne Internet erfassen (z. B. im Klassenzimmer) und
   synchronisieren automatisch, sobald wieder eine Verbindung besteht.
-- 🔒 **Datenschutz**: Die App erfindet nie Informationen. Sie nutzt
-  standardmäßig Schülernummern statt Klarnamen (wie in der
-  Projektanweisung vorgesehen) und speichert Daten in deinem **eigenen**
-  privaten Firebase-Projekt, nicht bei Anthropic/Claude oder einem
-  gemeinsamen Server.
+- 🔒 **Datenschutz**: Die App erfindet nie Informationen. Klassenlisten
+  und Vornamen werden ausschließlich in deinem **eigenen**, privaten
+  Firebase-Projekt gespeichert (nicht bei Anthropic/Claude oder einem
+  gemeinsamen Server) und trägst du direkt in der App ein — Namen laufen
+  nie durch eine Konversation mit Claude. Wer lieber bei der ursprünglich
+  vorgesehenen Nummern-Diktion ohne Klarnamen bleiben möchte, lässt den
+  Tab „Klassenlisten" für die betreffende Klasse einfach leer.
 
 ## Einrichtung (einmalig, ca. 5–10 Minuten)
 
@@ -107,14 +117,20 @@ Die App führt durch alle Schritte auch direkt im Einrichtungsbildschirm.
 ## Grenzen des Diktat-Parsers
 
 Der Parser arbeitet **regelbasiert** (Mustererkennung), nicht mit
-echtem Sprachverständnis. Er ordnet Schülernummern, Kategorien und Noten
-nach den Regeln der Projektanweisung zu (z. B. „5, 11, 19 Hausaufgaben
-vergessen“ → drei Einträge). Deshalb werden erkannte Einträge **immer**
-erst in einer editierbaren Tabelle angezeigt, bevor sie gespeichert
-werden — unsicher zugeordnete Zeilen sind farblich markiert. Klasse,
-Fach und Datum werden bewusst **nicht** aus dem Diktat geraten, sondern
-oben im Formular gesetzt — das macht die Erkennung der eigentlichen
-Beobachtungen deutlich zuverlässiger.
+echtem Sprachverständnis. Er ordnet Schüler, Kategorien und Noten nach
+festen Regeln zu (z. B. „5, 11, 19 Hausaufgaben vergessen“ → drei
+Einträge). Namen werden **ausschließlich** gegen die hinterlegte
+Klassenliste abgeglichen — kein Raten anhand von Großschreibung, da im
+Deutschen auch normale Substantive großgeschrieben werden. Ist ein
+Vorname in der Klasse mehrfach vergeben und lässt sich auch über den
+mitgesprochenen Nachnamen nicht eindeutig auflösen, wird der Eintrag als
+unsicher markiert und in der Review-Tabelle per Auswahlliste aufgelöst.
+Deshalb werden erkannte Einträge **immer** erst in einer editierbaren
+Tabelle angezeigt, bevor sie gespeichert werden — unsicher zugeordnete
+Zeilen sind farblich markiert. Klasse, Fach und Datum werden bewusst
+**nicht** aus dem Diktat geraten, sondern oben im Formular gesetzt —
+das macht die Erkennung der eigentlichen Beobachtungen deutlich
+zuverlässiger.
 
 ## Technik
 
