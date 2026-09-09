@@ -1,0 +1,16 @@
+{
+  "name": "Digitales Klassenbuch",
+  "short_name": "Klassenbuch",
+  "description": "Noten und Beobachtungen per Mikrofon erfassen, mit Excel-Export, Suche, Durchschnitten und Frühwarnsystem.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1120",
+  "theme_color": "#1e3a8a",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
