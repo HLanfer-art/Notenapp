@@ -295,20 +295,48 @@ const Parser = (() => {
   // {vorname, nachname}. Erkennt "Nachname, Vorname" (häufig bei
   // alphabetischen Schullisten) ebenso wie "Vorname Nachname" und
   // entfernt vorangestellte Listenzeichen ("1.", "1)", "-", "•").
+  // Trennt einen einzelnen Namens-Token in {vorname, nachname}. Enthält der
+  // Token noch ein Komma (nur im "Nachname, Vorname"-Modus möglich), wird
+  // das als Nachname/Vorname-Paar gelesen; ein überzähliges/einsames Komma
+  // (z. B. Zeile endete mit ",") fällt sauber auf einen reinen Vornamen
+  // zurück statt einen leeren Vornamen zu erzeugen.
+  function parseNameToken(token) {
+    if (token.includes(',')) {
+      const teile = token.split(',').map((p) => p.trim()).filter(Boolean);
+      if (teile.length >= 2) {
+        const [nachname, vorname] = teile;
+        return { vorname: vorname || '', nachname: nachname || '' };
+      }
+      token = teile[0] || '';
+    }
+    const worte = token.split(/\s+/).filter(Boolean);
+    return { vorname: worte[0] || '', nachname: worte.slice(1).join(' ') };
+  }
+
+  // Zerlegt eine eingefügte Namensliste in {vorname, nachname}-Objekte.
+  // Unterstützt zwei Schreibweisen:
+  //  - eine Person pro Zeile, optional als "Nachname, Vorname" (klassische
+  //    Kurslisten) — erkannt, wenn jede Zeile höchstens ein Komma enthält
+  //    und es mehrere Zeilen gibt;
+  //  - sonst werden sowohl Zeilenumbrüche ALS AUCH Kommas als Trenner
+  //    zwischen einzelnen Personen behandelt (z. B. eine reine
+  //    Vornamen-Liste "Max, Lena, Tom, Anna" auf einer oder mehreren
+  //    Zeilen).
   function parseNameList(text) {
-    return (text || '')
-      .split(/\r?\n/)
-      .map((line) => line.replace(/^\s*(?:\d{1,3}[.)]|[-•*])\s*/, '').trim())
-      .filter(Boolean)
-      .map((line) => {
-        if (line.includes(',')) {
-          const [nachname, vorname] = line.split(',').map((p) => p.trim());
-          return { vorname: vorname || '', nachname: nachname || '' };
-        }
-        const teile = line.split(/\s+/);
-        return { vorname: teile[0] || '', nachname: teile.slice(1).join(' ') };
-      })
-      .filter((s) => s.vorname);
+    const cleanLine = (l) => l.replace(/^\s*(?:\d{1,3}[.)]|[-•*])\s*/, '').trim();
+    const rawLines = (text || '').split(/\r?\n/).map(cleanLine).filter(Boolean);
+
+    const kommasProZeile = rawLines.map((l) => (l.match(/,/g) || []).length);
+    const istNachnameVornameListe =
+      rawLines.length > 1 &&
+      kommasProZeile.every((n) => n <= 1) &&
+      kommasProZeile.some((n) => n === 1);
+
+    const tokens = istNachnameVornameListe
+      ? rawLines
+      : (text || '').split(/\r?\n|,/).map(cleanLine).filter(Boolean);
+
+    return tokens.map(parseNameToken).filter((s) => s.vorname);
   }
 
   return {
