@@ -37,11 +37,13 @@ Projektanweisung ("Digitales Klassenbuch") technisch um.
   über die mitgeführte ID wieder verlustfrei zu einem Bestand
   zusammenführen.
 - 👥 **Klassenlisten**: Vorname/Nachname pro Klasse direkt in der App
-  pflegen (Tab „Klassenlisten") — einzeln oder per **Listen-Import**.
-  Unterstützt sowohl „Nachname, Vorname" (eine Person pro Zeile, z. B.
-  aus einer Kursliste kopiert) als auch reine Vornamen-Listen, die einfach
-  mit Kommas aneinandergereiht sind (z. B. „Max, Lena, Tom, Anna") — auf
-  einer oder über mehrere Zeilen verteilt. Diese Liste ist die
+  pflegen (Tab „Klassenlisten") — einzeln oder per **Listen-Import**:
+  Komma und Zeilenumbruch trennen dabei immer einzelne Kinder, beliebig
+  gemischt (z. B. „Max, Lena, Tom, Anna" auf einer oder über mehrere
+  Zeilen verteilt). Reine Vornamen reichen; wer den Nachnamen mit
+  einlesen möchte, schreibt „Vorname Nachname" pro Person — der
+  Nachname lässt sich außerdem jederzeit direkt in der Tabelle
+  ergänzen. Diese Liste ist die
   Grundlage für die namensbasierte Diktierfunktion und wird außerdem in
   Tabellen, Auswertungen, Frühwarnsystem, Zusammenfassung, Bericht und
   optional im Excel-Export angezeigt.

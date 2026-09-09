@@ -254,12 +254,8 @@ service cloud.firestore {
         </div>
         <div class="card">
           <h2>Ganze Liste einfügen</h2>
-          <p class="muted small">Eine Person pro Zeile („Nachname, Vorname" oder „Vorname Nachname") — oder einfach nur Vornamen, mit Kommas aneinandergereiht. Vorangestellte Nummern/Aufzählungszeichen werden automatisch entfernt.</p>
-          <textarea id="roster-bulk" rows="6" placeholder="Max, Lena, Tom, Anna
-
-oder klassisch:
-Meier, Max
-Schmidt, Lena"></textarea>
+          <p class="muted small">Komma oder Zeilenumbruch trennen einzelne Kinder — beliebig gemischt. Reine Vornamen reichen; „Vorname Nachname" pro Person geht auch. Vorangestellte Nummern/Aufzählungszeichen werden automatisch entfernt.</p>
+          <textarea id="roster-bulk" rows="6" placeholder="Max, Lena, Tom, Anna, Ben, Julia"></textarea>
           <div class="btn-row">
             <button type="button" id="btn-roster-bulk-add" class="btn-secondary">Liste einlesen</button>
           </div>
