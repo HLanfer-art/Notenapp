@@ -34,6 +34,13 @@
   function showError(sel, msg) { const el = $(sel); el.textContent = msg; el.hidden = false; }
   function hideError(sel) { $(sel).hidden = true; }
 
+  // Zeigt den hinterlegten Namen (falls vorhanden), sonst nur die Nummer.
+  function displayName(klasse, schueler) {
+    if (!schueler) return '–';
+    const name = Store.getName(klasse, schueler);
+    return name ? `${name} (Nr. ${schueler})` : `Nr. ${schueler}`;
+  }
+
   function parseNoteLabel(label) {
     if (!label) return null;
     const m = label.trim().match(/^([1-6])\s*(\+|-)?$/);
@@ -69,6 +76,7 @@
     if (currentTab === 'eintraege') renderEintraege(entries);
     if (currentTab === 'auswertung') renderAuswertung(entries);
     if (currentTab === 'warnung') renderWarnungen(entries);
+    if (currentTab === 'klassenlisten') renderRosterTable();
   }
 
   function updateSyncBadge() {
@@ -266,7 +274,7 @@
     if (r.unsicher) tr.classList.add('unsicher');
     tr.innerHTML = `
       <td><input type="checkbox" class="chk" checked></td>
-      <td><input type="text" class="in-schueler" value="${escapeHtml(r.schueler || '')}" style="width:60px"></td>
+      <td><input type="text" class="in-schueler" value="${escapeHtml(r.schueler || '')}" style="width:60px"><br><small class="in-schueler-name muted"></small></td>
       <td>${buildSelect('in-kategorie', Parser.KATEGORIEN, r.kategorie)}</td>
       <td><input type="text" class="in-beschreibung" value="${escapeHtml(r.beschreibung || '')}" style="min-width:200px"></td>
       <td><input type="text" class="in-note" value="${escapeHtml(r.noteLabel || '')}" style="width:55px" placeholder="–"></td>
@@ -275,6 +283,14 @@
       <td><button type="button" class="row-btn" title="Zeile entfernen">✕</button></td>
     `;
     tr.querySelector('.row-btn').addEventListener('click', () => tr.remove());
+    const nrInput = tr.querySelector('.in-schueler');
+    const nameHint = tr.querySelector('.in-schueler-name');
+    const updateNameHint = () => {
+      const name = Store.getName($('#stunde-klasse').value.trim(), nrInput.value.trim());
+      nameHint.textContent = name || '';
+    };
+    nrInput.addEventListener('input', updateNameHint);
+    updateNameHint();
     return tr;
   }
 
@@ -303,14 +319,14 @@
   function sectionHtml(title, list) {
     if (!list.length) return `<h3>${title}</h3><p class="muted small">– keine –</p>`;
     return `<h3>${title}</h3><ul>` + list.map((e) =>
-      `<li>${e.prioritaet} Schüler ${escapeHtml(e.schueler || '–')}: ${escapeHtml(e.beschreibung)}</li>`
+      `<li>${e.prioritaet} ${escapeHtml(displayName(e.klasse, e.schueler))}: ${escapeHtml(e.beschreibung)}</li>`
     ).join('') + `</ul>`;
   }
 
   function notenSectionHtml(list) {
     if (!list.length) return `<h3>Noten</h3><p class="muted small">– keine –</p>`;
     return `<h3>Noten</h3><ul>` + list.map((e) =>
-      `<li>Schüler ${escapeHtml(e.schueler || '–')} — ${escapeHtml(e.notenbereich || e.kategorie)}: Note ${escapeHtml(e.noteLabel || String(e.note))}</li>`
+      `<li>${escapeHtml(displayName(e.klasse, e.schueler))} — ${escapeHtml(e.notenbereich || e.kategorie)}: Note ${escapeHtml(e.noteLabel || String(e.note))}</li>`
     ).join('') + `</ul>`;
   }
 
@@ -391,7 +407,7 @@
 
   function buildEintragRow(e) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${e.datum}</td><td>${escapeHtml(e.klasse)}</td><td>${escapeHtml(e.fach)}</td><td>${escapeHtml(e.schueler)}</td><td>${escapeHtml(e.kategorie)}</td><td>${escapeHtml(e.beschreibung)}</td><td>${escapeHtml(e.noteLabel || '')}</td><td>${e.typ}</td><td>${e.prioritaet}</td><td><button class="row-btn btn-edit" title="Bearbeiten">✎</button> <button class="row-btn btn-del" title="Löschen">✕</button></td>`;
+    tr.innerHTML = `<td>${e.datum}</td><td>${escapeHtml(e.klasse)}</td><td>${escapeHtml(e.fach)}</td><td>${escapeHtml(displayName(e.klasse, e.schueler))}</td><td>${escapeHtml(e.kategorie)}</td><td>${escapeHtml(e.beschreibung)}</td><td>${escapeHtml(e.noteLabel || '')}</td><td>${e.typ}</td><td>${e.prioritaet}</td><td><button class="row-btn btn-edit" title="Bearbeiten">✎</button> <button class="row-btn btn-del" title="Löschen">✕</button></td>`;
     tr.querySelector('.btn-del').addEventListener('click', async () => {
       if (confirm('Eintrag wirklich löschen?')) {
         await Store.deleteEntry(e.id);
@@ -474,14 +490,15 @@
     tbody.innerHTML = '';
     profiles.forEach((p) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${escapeHtml(p.klasse)}</td><td>${escapeHtml(p.schueler)}</td><td>${p.gesamt.avg ?? '–'}</td><td>${p.zeitraum.avg ?? '–'}</td><td>${p.gesamt.count}</td><td>${p.positiv}</td><td>${p.negativ}</td><td>${p.letzterEintrag || ''}</td><td><button class="row-btn btn-report" title="Bericht">📄</button></td>`;
+      tr.innerHTML = `<td>${escapeHtml(p.klasse)}</td><td>${escapeHtml(displayName(p.klasse, p.schueler))}</td><td>${p.gesamt.avg ?? '–'}</td><td>${p.zeitraum.avg ?? '–'}</td><td>${p.gesamt.count}</td><td>${p.positiv}</td><td>${p.negativ}</td><td>${p.letzterEintrag || ''}</td><td><button class="row-btn btn-report" title="Bericht">📄</button></td>`;
       tr.querySelector('.btn-report').addEventListener('click', () => showReport(p));
       tbody.appendChild(tr);
     });
   }
 
   function showReport(p) {
-    $('#report-content').textContent = Stats.studentReport(p);
+    const name = Store.getName(p.klasse, p.schueler);
+    $('#report-content').textContent = Stats.studentReport(p, name);
     $('#report-card').hidden = false;
     $('#report-card').scrollIntoView({ behavior: 'smooth' });
   }
@@ -574,6 +591,53 @@
     renderWarnungen(Store.loadEntries());
   });
 
+  // ================================================== Tab: Klassenlisten
+  function buildRosterRow(nr, name) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" class="ro-nr" value="${escapeHtml(nr || '')}" style="width:70px"></td>
+      <td><input type="text" class="ro-name" value="${escapeHtml(name || '')}" style="min-width:200px"></td>
+      <td><button type="button" class="row-btn" title="Zeile entfernen">✕</button></td>
+    `;
+    tr.querySelector('.row-btn').addEventListener('click', () => tr.remove());
+    return tr;
+  }
+
+  function renderRosterTable() {
+    const klasse = $('#roster-klasse').value.trim();
+    const tbody = $('#roster-tbody');
+    tbody.innerHTML = '';
+    if (!klasse) return;
+    const namen = Store.loadRoster()[klasse] || {};
+    const nummern = Object.keys(namen).sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
+    nummern.forEach((nr) => tbody.appendChild(buildRosterRow(nr, namen[nr])));
+  }
+
+  $('#roster-klasse').addEventListener('change', renderRosterTable);
+  $('#roster-klasse').addEventListener('input', renderRosterTable);
+
+  $('#btn-roster-add').addEventListener('click', () => {
+    $('#roster-tbody').appendChild(buildRosterRow('', ''));
+  });
+
+  $('#btn-roster-save').addEventListener('click', async () => {
+    const klasse = $('#roster-klasse').value.trim();
+    if (!klasse) { toast('Bitte zuerst eine Klasse angeben.'); return; }
+    const namenMap = {};
+    $all('#roster-tbody tr').forEach((tr) => {
+      const nr = tr.querySelector('.ro-nr').value.trim();
+      const name = tr.querySelector('.ro-name').value.trim();
+      if (nr && name) namenMap[nr] = name;
+    });
+    try {
+      await Store.saveRosterClass(klasse, namenMap);
+      $('#roster-status').textContent = `Klassenliste ${klasse} gespeichert (${Object.keys(namenMap).length} Namen).`;
+      toast('Klassenliste gespeichert.');
+    } catch (e) {
+      $('#roster-status').textContent = 'Fehler: ' + e.message;
+    }
+  });
+
   // ================================================== Tab: Export/Import
   $('#btn-export-all').addEventListener('click', () => {
     ExportImport.exportToExcel(Store.loadEntries(), 'Klassenbuch_Gesamt');
@@ -605,11 +669,16 @@
   });
 
   FirebaseSync.onEntriesChange((entries) => { Store.setCache(entries); });
+  FirebaseSync.onRosterChange((roster) => { Store.setRosterCache(roster); });
 
   Store.onChange((entries) => {
     populateDropdowns(entries);
     renderCurrentTab();
   });
+
+  // Namen können in mehreren Tabs angezeigt werden (Einträge, Auswertungen,
+  // Warnsystem) -> bei Änderung überall neu rendern.
+  Store.onRosterChange(() => { renderCurrentTab(); });
 
   window.addEventListener('online', updateSyncBadge);
   window.addEventListener('offline', updateSyncBadge);

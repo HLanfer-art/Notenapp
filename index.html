@@ -95,6 +95,7 @@ service cloud.firestore {
       <button data-tab="eintraege" class="tab">📋 Einträge</button>
       <button data-tab="auswertung" class="tab">📊 Auswertungen</button>
       <button data-tab="warnung" class="tab">⚠️ Warnsystem</button>
+      <button data-tab="klassenlisten" class="tab">👥 Klassenlisten</button>
       <button data-tab="export" class="tab">⇅ Export</button>
     </nav>
 
@@ -237,6 +238,32 @@ service cloud.firestore {
           <div class="btn-row" id="warn-settings-save-row" hidden>
             <button type="button" id="btn-settings-save" class="btn-primary">Einstellungen speichern</button>
           </div>
+        </div>
+      </section>
+
+      <!-- ---- Klassenlisten ---- -->
+      <section id="tab-klassenlisten" class="tabpanel">
+        <div class="card">
+          <p class="muted small">Namen werden ausschließlich in deinem eigenen, privaten Firebase-Projekt gespeichert — nirgendwo sonst. Trage sie hier direkt in der App ein. Die Diktatfunktion bleibt weiterhin nummernbasiert; die Namen dienen nur der Anzeige in Tabellen, Auswertungen und Berichten.</p>
+          <div class="form-row">
+            <div class="field">
+              <label for="roster-klasse">Klasse</label>
+              <input type="text" id="roster-klasse" list="klassen-list" placeholder="z. B. 9a">
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-scroll">
+            <table id="roster-table">
+              <thead><tr><th>Nummer</th><th>Name</th><th></th></tr></thead>
+              <tbody id="roster-tbody"></tbody>
+            </table>
+          </div>
+          <div class="btn-row">
+            <button type="button" id="btn-roster-add" class="btn-secondary">+ Zeile hinzufügen</button>
+            <button type="button" id="btn-roster-save" class="btn-primary">Klassenliste speichern</button>
+          </div>
+          <p id="roster-status" class="muted small"></p>
         </div>
       </section>
 

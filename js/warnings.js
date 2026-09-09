@@ -40,7 +40,8 @@ const Warnings = (() => {
     const warnings = [];
 
     groups.forEach((g) => {
-      const label = `Schüler ${g.schueler} (${g.klasse})`;
+      const rosterName = Store.getName(g.klasse, g.schueler);
+      const label = rosterName ? `${rosterName} (Nr. ${g.schueler}, ${g.klasse})` : `Schüler ${g.schueler} (${g.klasse})`;
 
       // Hausaufgaben vergessen
       const ha = withinWindow(

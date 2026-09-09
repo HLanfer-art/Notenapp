@@ -98,9 +98,9 @@ const Stats = (() => {
   // Formatierte Text-Zusammenfassung für einen einzelnen Schüler
   // (z. B. für Elternsprechtage / Zeugnisvorbereitung) im Stil der
   // Projektanweisung.
-  function studentReport(profile) {
+  function studentReport(profile, name) {
     const lines = [];
-    lines.push(`Schüler ${profile.schueler} (Klasse ${profile.klasse})`);
+    lines.push(name ? `${name} (Nr. ${profile.schueler}, Klasse ${profile.klasse})` : `Schüler ${profile.schueler} (Klasse ${profile.klasse})`);
     lines.push('');
     lines.push(`Gesamtdurchschnitt: ${profile.gesamt.avg ?? '–'} (${profile.gesamt.count} Note(n))`);
     NOTENBEREICHE.forEach((nb) => {

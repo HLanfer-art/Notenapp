@@ -31,6 +31,11 @@ Projektanweisung ("Digitales Klassenbuch") technisch um.
   Positiv/Negativ, Priorität). Mehrere exportierte Tabellen lassen sich
   über die mitgeführte ID wieder verlustfrei zu einem Bestand
   zusammenführen.
+- 👥 **Klassenlisten**: Nummer↔Name pro Klasse direkt in der App pflegen
+  (Tab „Klassenlisten"). Namen werden dort ergänzt, wo bisher „Schüler X"
+  stand (Tabellen, Auswertungen, Frühwarnsystem, Zusammenfassung, Bericht,
+  optional im Excel-Export) — die Diktatfunktion selbst bleibt weiterhin
+  rein nummernbasiert.
 - 🔄 **Synchronisation**: Cloud Firestore mit Offline-Cache — Einträge
   lassen sich auch ohne Internet erfassen (z. B. im Klassenzimmer) und
   synchronisieren automatisch, sobald wieder eine Verbindung besteht.
@@ -60,17 +65,26 @@ gespeichert, sondern einmal in der App eingegeben.
    rules_version = '2';
    service cloud.firestore {
      match /databases/{database}/documents {
-       match /users/{uid}/entries/{entryId} {
+       match /users/{uid}/{document=**} {
          allow read, write: if request.auth != null && request.auth.uid == uid;
        }
      }
    }
    ```
+   (Die Regel gilt pauschal für alle Unter-Sammlungen unter `users/{uid}`
+   — also sowohl die Einträge als auch die Klassenlisten — und muss bei
+   künftigen Erweiterungen nicht erneut angepasst werden.)
 6. App öffnen, Code-Block einfügen, Konto per E-Mail/Passwort anlegen.
 7. Auf jedem weiteren Gerät (iPhone/iPad/Mac): App öffnen, denselben
    Code-Block einfügen, mit **denselben Zugangsdaten** anmelden.
 
 Die App führt durch alle Schritte auch direkt im Einrichtungsbildschirm.
+
+> **Bereits eingerichtet?** Falls du dein Firebase-Projekt schon mit der
+> alten, engeren Regel (nur `entries`) angelegt hast, aktualisiere sie
+> einmalig unter **Firestore → Regeln** auf die obige Fassung, damit die
+> neue Klassenlisten-Funktion (siehe unten) ebenfalls gespeichert werden
+> kann.
 
 ## Nutzung
 
