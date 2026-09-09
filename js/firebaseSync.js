@@ -8,7 +8,11 @@
  * ohne Internet erfassen und werden automatisch synchronisiert, sobald
  * wieder eine Verbindung besteht.
  *
- * Datenmodell: users/{uid}/entries/{entryId}
+ * Datenmodell:
+ *  - users/{uid}/entries/{entryId} — Klassenbuch-Einträge
+ *  - users/{uid}/roster/{klasse}   — Klassenlisten (Nummer -> Name),
+ *    ausschließlich zur Anzeige in der App; die Einträge selbst
+ *    speichern weiterhin nur die Nummer.
  * Sicherheitsregeln (in der Firebase-Konsole -> Firestore -> Regeln)
  * müssen sicherstellen, dass jede:r Nutzer:in nur eigene Daten lesen/
  * schreiben kann (siehe README.md für die exakten Regeln).
@@ -21,16 +25,20 @@ const FirebaseSync = (() => {
   let auth = null;
   let db = null;
   let unsubscribeSnapshot = null;
+  let unsubscribeRosterSnapshot = null;
   let currentUser = null;
 
   const listeners = {
     entries: [],   // callback(entries[])
+    roster: [],    // callback({klasse: {nr: name}})
     auth: [],      // callback(user|null)
   };
 
   function onEntriesChange(cb) { listeners.entries.push(cb); }
+  function onRosterChange(cb) { listeners.roster.push(cb); }
   function onAuthChange(cb) { listeners.auth.push(cb); }
   function emitEntries(entries) { listeners.entries.forEach((cb) => cb(entries)); }
+  function emitRoster(roster) { listeners.roster.forEach((cb) => cb(roster)); }
   function emitAuth(user) { listeners.auth.forEach((cb) => cb(user)); }
 
   function loadConfig() {
@@ -85,9 +93,10 @@ const FirebaseSync = (() => {
         emitAuth(user);
         if (user) {
           subscribeEntries();
-        } else if (unsubscribeSnapshot) {
-          unsubscribeSnapshot();
-          unsubscribeSnapshot = null;
+          subscribeRoster();
+        } else {
+          if (unsubscribeSnapshot) { unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+          if (unsubscribeRosterSnapshot) { unsubscribeRosterSnapshot(); unsubscribeRosterSnapshot = null; }
         }
       });
     }
@@ -99,6 +108,11 @@ const FirebaseSync = (() => {
     return db.collection('users').doc(currentUser.uid).collection('entries');
   }
 
+  function rosterCollection() {
+    if (!currentUser) throw new Error('Nicht angemeldet.');
+    return db.collection('users').doc(currentUser.uid).collection('roster');
+  }
+
   function subscribeEntries() {
     if (unsubscribeSnapshot) unsubscribeSnapshot();
     unsubscribeSnapshot = entriesCollection().onSnapshot(
@@ -108,6 +122,18 @@ const FirebaseSync = (() => {
         emitEntries(entries);
       },
       (err) => console.error('Fehler beim Synchronisieren:', err)
+    );
+  }
+
+  function subscribeRoster() {
+    if (unsubscribeRosterSnapshot) unsubscribeRosterSnapshot();
+    unsubscribeRosterSnapshot = rosterCollection().onSnapshot(
+      (snap) => {
+        const roster = {};
+        snap.forEach((doc) => { roster[doc.id] = (doc.data() || {}).namen || {}; });
+        emitRoster(roster);
+      },
+      (err) => console.error('Fehler beim Synchronisieren der Klassenlisten:', err)
     );
   }
 
@@ -168,6 +194,14 @@ const FirebaseSync = (() => {
     }
   }
 
+  // Speichert die komplette Namensliste einer Klasse (Nummer -> Name).
+  async function saveRosterClass(klasse, namenMap) {
+    await rosterCollection().doc(klasse).set({
+      namen: namenMap,
+      aktualisiertAm: new Date().toISOString(),
+    });
+  }
+
   return {
     loadConfig,
     saveConfig,
@@ -182,9 +216,11 @@ const FirebaseSync = (() => {
     getCurrentUser,
     onAuthChange,
     onEntriesChange,
+    onRosterChange,
     addEntries,
     updateEntry,
     deleteEntry,
     upsertEntries,
+    saveRosterClass,
   };
 })();

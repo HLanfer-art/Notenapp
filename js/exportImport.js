@@ -8,11 +8,13 @@
  * Eine zusätzliche, ganz links stehende Spalte "ID" wird mitgeführt,
  * damit exportierte Tabellen später wieder eingelesen und verlustfrei
  * mit dem Bestand zusammengeführt werden können (Merge über die ID statt
- * Duplikate).
+ * Duplikate). Eine "Name"-Spalte am Ende ergänzt, sofern eine Klassenliste
+ * hinterlegt ist, den Klarnamen rein zur Lesbarkeit im Export — die
+ * eigentlichen Einträge bleiben unverändert nummernbasiert.
  */
 
 const ExportImport = (() => {
-  const HEADERS = ['ID', 'Datum', 'Klasse', 'Fach', 'Schüler', 'Kategorie', 'Beschreibung', 'Note', 'Positiv/Negativ', 'Priorität', 'Notenbereich'];
+  const HEADERS = ['ID', 'Datum', 'Klasse', 'Fach', 'Schüler', 'Kategorie', 'Beschreibung', 'Note', 'Positiv/Negativ', 'Priorität', 'Notenbereich', 'Name'];
 
   function typLabel(typ) {
     if (typ === 'positiv') return 'Positiv';
@@ -40,6 +42,7 @@ const ExportImport = (() => {
       'Positiv/Negativ': typLabel(e.typ),
       'Priorität': e.prioritaet || '',
       Notenbereich: e.notenbereich || '',
+      Name: Store.getName(e.klasse, e.schueler) || '',
     }));
   }
 
@@ -48,6 +51,7 @@ const ExportImport = (() => {
     return profiles.map((p) => ({
       Klasse: p.klasse,
       'Schüler': p.schueler,
+      Name: Store.getName(p.klasse, p.schueler) || '',
       'Ø gesamt': p.gesamt.avg ?? '',
       'Anzahl Noten': p.gesamt.count,
       'Ø Referat': p.perBereich['Referat'].avg ?? '',
@@ -66,7 +70,7 @@ const ExportImport = (() => {
     const ws = XLSX.utils.json_to_sheet(rows, { header: HEADERS });
     ws['!cols'] = [
       { wch: 12 }, { wch: 11 }, { wch: 8 }, { wch: 12 }, { wch: 8 },
-      { wch: 16 }, { wch: 40 }, { wch: 6 }, { wch: 14 }, { wch: 8 }, { wch: 16 },
+      { wch: 16 }, { wch: 40 }, { wch: 6 }, { wch: 14 }, { wch: 8 }, { wch: 16 }, { wch: 20 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, 'Klassenbuch');
 

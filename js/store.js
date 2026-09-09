@@ -27,10 +27,14 @@ const Store = (() => {
   };
 
   let cache = [];
+  let rosterCache = {}; // { klasse: { nr: name } }
   const cacheListeners = [];
+  const rosterListeners = [];
 
   function onChange(cb) { cacheListeners.push(cb); }
   function notify() { cacheListeners.forEach((cb) => cb(cache)); }
+  function onRosterChange(cb) { rosterListeners.push(cb); }
+  function notifyRoster() { rosterListeners.forEach((cb) => cb(rosterCache)); }
 
   // Wird von app.js aufgerufen, sobald firebaseSync neue Daten liefert.
   function setCache(entries) {
@@ -41,6 +45,27 @@ const Store = (() => {
 
   function loadEntries() {
     return cache;
+  }
+
+  // Wird von app.js aufgerufen, sobald firebaseSync neue Klassenlisten liefert.
+  function setRosterCache(roster) {
+    rosterCache = roster || {};
+    notifyRoster();
+  }
+
+  function loadRoster() {
+    return rosterCache;
+  }
+
+  // Name für Klasse+Nummer, oder null, falls nicht hinterlegt.
+  function getName(klasse, schueler) {
+    if (!klasse || !schueler) return null;
+    const klassenListe = rosterCache[klasse];
+    return (klassenListe && klassenListe[schueler]) || null;
+  }
+
+  async function saveRosterClass(klasse, namenMap) {
+    await FirebaseSync.saveRosterClass(klasse, namenMap);
   }
 
   async function addEntries(newEntries) {
@@ -106,6 +131,11 @@ const Store = (() => {
     loadHistory,
     loadSettings,
     saveSettings,
+    setRosterCache,
+    onRosterChange,
+    loadRoster,
+    getName,
+    saveRosterClass,
     DEFAULT_SETTINGS,
   };
 })();
